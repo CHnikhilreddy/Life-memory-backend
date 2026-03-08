@@ -71,6 +71,7 @@ model PendingInvite {
   email     String
   spaceId   String
   invitedBy String
+  status    String   @default("pending")
   createdAt DateTime @default(now())
 
   space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)

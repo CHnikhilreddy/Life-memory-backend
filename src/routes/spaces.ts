@@ -35,6 +35,28 @@ router.get('/', async (req, res) => {
   res.json(spaces.map(formatSpace))
 })
 
+// GET /api/spaces/my-invites
+router.get('/my-invites', async (req, res) => {
+  const user = (req as any).user as User
+  const invites = await prisma.pendingInvite.findMany({
+    where: { email: user.email },
+    include: { space: { select: { title: true, coverEmoji: true } } },
+    orderBy: { createdAt: 'desc' },
+  })
+  const invitedByIds = [...new Set(invites.map((i) => i.invitedBy))]
+  const inviters = await prisma.user.findMany({ where: { id: { in: invitedByIds } }, select: { id: true, name: true } })
+  const inviterMap = Object.fromEntries(inviters.map((u) => [u.id, u.name]))
+  res.json(invites.map((i) => ({
+    id: i.id,
+    spaceId: i.spaceId,
+    spaceName: i.space.title,
+    spaceEmoji: i.space.coverEmoji,
+    invitedBy: inviterMap[i.invitedBy] || 'Someone',
+    status: i.status,
+    createdAt: i.createdAt,
+  })))
+})
+
 // GET /api/spaces/:id
 router.get('/:id', async (req, res) => {
   const user = (req as any).user as User
@@ -218,6 +240,59 @@ router.post('/:id/invite', async (req, res) => {
   }).catch((e) => console.error('Email send failed:', e))
 
   res.json({ success: true, message: `Invite sent to ${email}` })
+})
+
+// POST /api/spaces/:id/accept-invite
+router.post('/:id/accept-invite', async (req, res) => {
+  const user = (req as any).user as User
+  const invite = await prisma.pendingInvite.findUnique({
+    where: { email_spaceId: { email: user.email, spaceId: req.params.id } },
+  })
+  if (!invite) { res.status(404).json({ error: 'Invite not found' }); return }
+  await prisma.spaceMember.upsert({
+    where: { userId_spaceId: { userId: user.id, spaceId: req.params.id } },
+    create: { userId: user.id, spaceId: req.params.id, role: 'member', status: 'active', joinedAt: new Date().toISOString().split('T')[0] },
+    update: { status: 'active' },
+  })
+  await prisma.pendingInvite.delete({ where: { email_spaceId: { email: user.email, spaceId: req.params.id } } })
+  res.json({ success: true })
+})
+
+// POST /api/spaces/:id/reject-invite
+router.post('/:id/reject-invite', async (req, res) => {
+  const user = (req as any).user as User
+  await prisma.pendingInvite.updateMany({
+    where: { email: user.email, spaceId: req.params.id },
+    data: { status: 'rejected' },
+  })
+  res.json({ success: true })
+})
+
+// GET /api/spaces/:id/pending-invites
+router.get('/:id/pending-invites', async (req, res) => {
+  const user = (req as any).user as User
+  const myMember = await prisma.spaceMember.findUnique({ where: { userId_spaceId: { userId: user.id, spaceId: req.params.id } } })
+  if (!myMember || (myMember.role !== 'owner' && myMember.role !== 'admin')) {
+    res.status(403).json({ error: 'Only owner or admin can view pending invites' }); return
+  }
+  const invites = await prisma.pendingInvite.findMany({
+    where: { spaceId: req.params.id },
+    orderBy: { createdAt: 'desc' },
+  })
+  res.json(invites.map((i) => ({
+    id: i.id, email: i.email, invitedBy: i.invitedBy, status: i.status, createdAt: i.createdAt,
+  })))
+})
+
+// DELETE /api/spaces/:id/pending-invites/:inviteId
+router.delete('/:id/pending-invites/:inviteId', async (req, res) => {
+  const user = (req as any).user as User
+  const myMember = await prisma.spaceMember.findUnique({ where: { userId_spaceId: { userId: user.id, spaceId: req.params.id } } })
+  if (!myMember || (myMember.role !== 'owner' && myMember.role !== 'admin')) {
+    res.status(403).json({ error: 'Only owner or admin can cancel invites' }); return
+  }
+  await prisma.pendingInvite.delete({ where: { id: req.params.inviteId } })
+  res.json({ success: true })
 })
 
 // PATCH /api/spaces/:id

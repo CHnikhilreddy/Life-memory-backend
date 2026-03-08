@@ -192,7 +192,6 @@ router.post('/:id/invite', async (req, res) => {
   const inviteCode = space?.inviteCode || ''
 
   const resend = new Resend(process.env.RESEND_API_KEY)
-  console.log('[Invite] Sending email to:', normalizedEmail, '| API key:', process.env.RESEND_API_KEY ? 'SET' : 'MISSING')
   resend.emails.send({
     from: 'MemoryWall <noreply@jagadeeshsura.in>',
     to: normalizedEmail,
@@ -216,7 +215,7 @@ router.post('/:id/invite', async (req, res) => {
         </p>
       </div>
     `,
-  }).then((r) => console.log('[Invite] Email result:', JSON.stringify(r))).catch((e) => console.error('[Invite] Email failed:', e))
+  }).catch((e) => console.error('Email send failed:', e))
 
   res.json({ success: true, message: `Invite sent to ${email}` })
 })

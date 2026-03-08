@@ -100,7 +100,6 @@ router.delete('/:spaceId/memories/:memoryId', async (req, res) => {
   if (memory) {
     const allUrls: string[] = []
     const memPhotos: string[] = typeof memory.photos === 'string' ? JSON.parse(memory.photos) : (memory.photos as any) || []
-    console.log('[Delete] memory.photos raw:', memory.photos, '| parsed:', memPhotos)
     allUrls.push(...memPhotos)
     for (const sub of memory.substories) {
       if (sub.photos) {
@@ -108,8 +107,7 @@ router.delete('/:spaceId/memories/:memoryId', async (req, res) => {
         allUrls.push(...subPhotos)
       }
     }
-    console.log('[Delete] allUrls:', allUrls)
-    if (allUrls.length > 0) deleteCloudinaryImages(allUrls).catch((e) => console.error('[Delete] Cloudinary error:', e))
+    if (allUrls.length > 0) deleteCloudinaryImages(allUrls).catch(() => {})
   }
 
   await prisma.memory.delete({ where: { id: req.params.memoryId } })

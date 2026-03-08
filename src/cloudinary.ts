@@ -22,10 +22,8 @@ function extractPublicId(url: string): string | null {
 export async function deleteCloudinaryImages(urls: string[]): Promise<void> {
   if (!urls || urls.length === 0) return
   const publicIds = urls.map(extractPublicId).filter(Boolean) as string[]
-  if (publicIds.length === 0) { console.log('[Cloudinary] No valid public IDs extracted from URLs:', urls); return }
-  console.log('[Cloudinary] Deleting:', publicIds)
-  const results = await Promise.all(publicIds.map((id) => cloudinary.uploader.destroy(id).catch((e) => ({ error: e.message, id }))))
-  console.log('[Cloudinary] Results:', JSON.stringify(results))
+  if (publicIds.length === 0) return
+  await Promise.all(publicIds.map((id) => cloudinary.uploader.destroy(id)))
 }
 
 // Returns URLs that were removed (present in oldUrls but not in newUrls)

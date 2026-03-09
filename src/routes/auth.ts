@@ -1,22 +1,9 @@
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import { prisma } from '../db.js'
+import { authMiddleware } from '../middleware/auth.js'
 
 const router = Router()
-
-async function processPendingInvites(userId: string, email: string) {
-  const invites = await prisma.pendingInvite.findMany({ where: { email: email.toLowerCase() } })
-  if (invites.length === 0) return
-  for (const invite of invites) {
-    const exists = await prisma.spaceMember.findUnique({ where: { userId_spaceId: { userId, spaceId: invite.spaceId } } })
-    if (!exists) {
-      await prisma.spaceMember.create({
-        data: { userId, spaceId: invite.spaceId, role: 'member', status: 'active', joinedAt: new Date().toISOString().split('T')[0] },
-      })
-    }
-  }
-  await prisma.pendingInvite.deleteMany({ where: { email: email.toLowerCase() } })
-}
 
 // POST /api/auth/signup
 router.post('/signup', async (req, res) => {
@@ -37,7 +24,6 @@ router.post('/signup', async (req, res) => {
       password: hashed,
     },
   })
-  await processPendingInvites(user.id, user.email)
   res.json({ user: { id: user.id, name: user.name, email: user.email, avatar: user.avatar }, token: user.id })
 })
 
@@ -65,7 +51,6 @@ router.post('/login', async (req, res) => {
         res.status(401).json({ error: 'Invalid email or password' }); return
       }
     }
-    await processPendingInvites(user.id, user.email)
     res.json({ user: { id: user.id, name: user.name, email: user.email, avatar: user.avatar, phone: user.phone }, token: user.id })
     return
   }
@@ -79,6 +64,38 @@ router.post('/login', async (req, res) => {
   }
 
   res.status(400).json({ error: 'Email or phone required' })
+})
+
+// POST /api/auth/change-password
+router.post('/change-password', authMiddleware, async (req, res) => {
+  const { oldPassword, newPassword } = req.body
+  const user = (req as any).user
+
+  if (!oldPassword || !newPassword) {
+    res.status(400).json({ error: 'Old and new passwords are required' })
+    return
+  }
+
+  // Verify old password
+  if (!user.password) {
+    res.status(400).json({ error: 'Account does not have a password set' })
+    return
+  }
+
+  const valid = await bcrypt.compare(oldPassword, user.password)
+  if (!valid) {
+    res.status(401).json({ error: 'Incorrect current password' })
+    return
+  }
+
+  // Update password
+  const hashed = await bcrypt.hash(newPassword, 10)
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { password: hashed },
+  })
+
+  res.json({ success: true })
 })
 
 // GET /api/auth/users

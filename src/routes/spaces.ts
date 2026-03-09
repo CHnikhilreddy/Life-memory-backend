@@ -185,20 +185,13 @@ router.post('/:id/invite', async (req, res) => {
 
   const normalizedEmail = email.toLowerCase().trim()
 
-  // If user already exists, add them directly
+  // Check if the user is already a member
   const invitedUser = await prisma.user.findUnique({ where: { email: normalizedEmail } })
   if (invitedUser) {
     const existing = await prisma.spaceMember.findUnique({ where: { userId_spaceId: { userId: invitedUser.id, spaceId: req.params.id } } })
     if (existing?.status === 'active') {
       res.status(409).json({ error: 'This user is already a member' }); return
     }
-    await prisma.spaceMember.upsert({
-      where: { userId_spaceId: { userId: invitedUser.id, spaceId: req.params.id } },
-      create: { userId: invitedUser.id, spaceId: req.params.id, role: 'member', status: 'active', joinedAt: new Date().toISOString().split('T')[0] },
-      update: { status: 'active' },
-    })
-    res.json({ success: true, message: `${invitedUser.name} has been added to the space` })
-    return
   }
 
   // Store pending invite — auto-joins when they sign up

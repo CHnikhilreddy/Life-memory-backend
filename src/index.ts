@@ -39,7 +39,8 @@ const verifyLimiter = rateLimit({
   legacyHeaders: false,
 })
 app.use('/api/auth/login', loginLimiter)
-app.use('/api/auth/signup', loginLimiter)
+app.use('/api/auth/pre-signup', loginLimiter)
+app.use('/api/auth/complete-signup', loginLimiter)
 app.use('/api/auth/forgot-password', loginLimiter)
 app.use('/api/auth/verify-email', verifyLimiter)
 

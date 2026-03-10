@@ -14,6 +14,8 @@ export function formatSpace(space: any) {
     title: space.title,
     coverImage: space.coverImage,
     coverEmoji: space.coverEmoji,
+    coverIcon: space.coverIcon || '',
+    coverColor: space.coverColor || '',
     memoryCount: space._count?.memories ?? space.memories?.length ?? 0,
     type: space.type,
     createdBy: space.createdById,

@@ -33,6 +33,8 @@ model Space {
   title       String
   coverImage  String   @default("")
   coverEmoji  String   @default("✨")
+  coverIcon   String   @default("")
+  coverColor  String   @default("")
   type        String   @default("personal")
   inviteCode  String?  @unique
   description String   @default("")

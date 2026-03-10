@@ -84,7 +84,7 @@ router.get('/:id', async (req, res) => {
 // POST /api/spaces
 router.post('/', async (req, res) => {
   const user = (req as any).user as User
-  const { title, coverEmoji, type, description } = req.body
+  const { title, coverEmoji, coverIcon, coverColor, type, description } = req.body
   if (!title?.trim()) { res.status(400).json({ error: 'Title is required' }); return }
 
   const space = await prisma.space.create({
@@ -92,6 +92,8 @@ router.post('/', async (req, res) => {
       id: `space-${Date.now()}`,
       title: title.trim(),
       coverEmoji: coverEmoji || '✨',
+      coverIcon: coverIcon || '',
+      coverColor: coverColor || '',
       type: type || 'personal',
       description: description || '',
       createdById: user.id,
@@ -294,10 +296,12 @@ router.patch('/:id', async (req, res) => {
   const myMember = await prisma.spaceMember.findUnique({ where: { userId_spaceId: { userId: user.id, spaceId: req.params.id } } })
   if (!myMember || myMember.role !== 'owner') { res.status(403).json({ error: 'Only the owner can edit this space' }); return }
 
-  const { title, coverEmoji, description } = req.body
+  const { title, coverEmoji, coverIcon, coverColor, description } = req.body
   const data: any = {}
   if (title !== undefined) data.title = title.trim()
   if (coverEmoji !== undefined) data.coverEmoji = coverEmoji
+  if (coverIcon !== undefined) data.coverIcon = coverIcon
+  if (coverColor !== undefined) data.coverColor = coverColor
   if (description !== undefined) data.description = description
 
   const space = await prisma.space.update({ where: { id: req.params.id }, data, include: spaceIncludes })

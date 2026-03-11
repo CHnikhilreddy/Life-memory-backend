@@ -3,6 +3,7 @@ import { prisma, formatSpace, formatSpaceWithMemories } from '../db.js'
 import { authMiddleware } from '../middleware/auth.js'
 import { User } from '../types.js'
 import { Resend } from 'resend'
+import { deleteCloudinaryImages } from '../cloudinary.js'
 
 const INVITE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 async function generateInviteCode(): Promise<string> {
@@ -315,8 +316,29 @@ router.delete('/:id', async (req, res) => {
   const myMember = await prisma.spaceMember.findUnique({ where: { userId_spaceId: { userId: user.id, spaceId: req.params.id } } })
   if (!myMember || myMember.role !== 'owner') { res.status(403).json({ error: 'Only the owner can delete this space' }); return }
 
+  // Collect all photo URLs before deleting
+  const memories = await prisma.memory.findMany({
+    where: { spaceId: req.params.id },
+    include: { substories: true },
+  })
+  const allPhotoUrls: string[] = []
+  for (const memory of memories) {
+    const memPhotos: string[] = memory.photos ? JSON.parse(memory.photos as string) : []
+    allPhotoUrls.push(...memPhotos)
+    for (const sub of memory.substories) {
+      if (sub.photos) {
+        const subPhotos: string[] = JSON.parse(sub.photos as string)
+        allPhotoUrls.push(...subPhotos)
+      }
+    }
+  }
+
+  // Delete space from DB (cascades to memories, substories, members, invites)
   await prisma.space.delete({ where: { id: req.params.id } })
+
+  // Respond immediately — clean up Cloudinary in background
   res.json({ success: true })
+  if (allPhotoUrls.length > 0) deleteCloudinaryImages(allPhotoUrls).catch(() => {})
 })
 
 // POST /api/spaces/:id/leave  (any member can leave, except owner)

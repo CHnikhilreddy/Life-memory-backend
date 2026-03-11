@@ -39,8 +39,8 @@ router.get('/', async (req, res) => {
 router.get('/my-invites', async (req, res) => {
   const user = (req as any).user as User
   const invites = await prisma.pendingInvite.findMany({
-    where: { email: user.email },
-    include: { space: { select: { title: true, coverEmoji: true } } },
+    where: { email: user.email, status: 'pending' },
+    include: { space: { select: { title: true, coverEmoji: true, coverIcon: true } } },
     orderBy: { createdAt: 'desc' },
   })
   const invitedByIds = [...new Set(invites.map((i) => i.invitedBy))]
@@ -51,6 +51,7 @@ router.get('/my-invites', async (req, res) => {
     spaceId: i.spaceId,
     spaceName: i.space.title,
     spaceEmoji: i.space.coverEmoji,
+    spaceIcon: i.space.coverIcon || undefined,
     invitedBy: inviterMap[i.invitedBy] || 'Someone',
     status: i.status,
     createdAt: i.createdAt,

@@ -64,7 +64,7 @@ router.get('/:id', async (req, res) => {
     where: { id: req.params.id },
     include: {
       ...spaceIncludes,
-      memories: true,
+      memories: { include: { substories: true } },
     },
   })
   if (!space) { res.status(404).json({ error: 'Space not found' }); return }

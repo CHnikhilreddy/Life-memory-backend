@@ -29,6 +29,7 @@ function validatePassword(password: string): string | null {
 }
 
 async function sendVerificationEmail(email: string, name: string, code: string) {
+  if (!process.env.RESEND_API_KEY) { console.log(`[dev] Verification code for ${email}: ${code}`); return }
   const resend = new Resend(process.env.RESEND_API_KEY)
   resend.emails.send({
     from: 'My Inner Circle <noreply@jagadeeshsura.in>',
@@ -51,6 +52,7 @@ async function sendVerificationEmail(email: string, name: string, code: string) 
 }
 
 async function sendResetEmail(email: string, code: string) {
+  if (!process.env.RESEND_API_KEY) { console.log(`[dev] Reset code for ${email}: ${code}`); return }
   const resend = new Resend(process.env.RESEND_API_KEY)
   resend.emails.send({
     from: 'My Inner Circle <noreply@jagadeeshsura.in>',

@@ -230,7 +230,6 @@ router.post('/:id/invite', async (req, res) => {
     update: { invitedBy: user.id, status: 'pending' },
   })
 
-  const appUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
   const spaceName = space?.title || 'a memory space'
 
   if (process.env.RESEND_API_KEY) {
@@ -248,7 +247,7 @@ router.post('/:id/invite', async (req, res) => {
           <p style="color:#6b5744;font-size:15px;line-height:1.6;">
             Sign in to My Inner Circle to accept or decline this invitation.
           </p>
-          <a href="${appUrl}" style="display:inline-block;background:linear-gradient(135deg,#c9a96e,#e8927c);color:white;text-decoration:none;padding:12px 28px;border-radius:12px;font-size:15px;font-weight:600;margin:16px 0;">
+          <a href="https://jagadeeshsura.in" style="display:inline-block;background:linear-gradient(135deg,#c9a96e,#e8927c);color:white;text-decoration:none;padding:12px 28px;border-radius:12px;font-size:15px;font-weight:600;margin:16px 0;">
             Open My Inner Circle
           </a>
           <p style="color:#9b8579;font-size:13px;margin-top:24px;">

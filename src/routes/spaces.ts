@@ -29,9 +29,23 @@ router.get('/', async (req, res) => {
   const user = (req as any).user as User
   const spaces = await prisma.space.findMany({
     where: { members: { some: { userId: user.id, status: 'active' } } },
-    include: spaceIncludes,
+    include: {
+      ...spaceIncludes,
+      memories: { select: { visibleTo: true, createdById: true } },
+    },
   })
-  res.json(spaces.map(formatSpace))
+  res.json(spaces.map((space) => {
+    const formatted = formatSpace(space)
+    // Override memoryCount with visible-only count
+    const visibleMemories = (space.memories || []).filter((m: any) => {
+      const visibleTo = (() => { try { return typeof m.visibleTo === 'string' ? JSON.parse(m.visibleTo) : m.visibleTo } catch { return null } })()
+      if (!visibleTo || !Array.isArray(visibleTo) || visibleTo.length === 0) return true
+      if (m.createdById === user.id) return true
+      return visibleTo.includes(user.id)
+    })
+    formatted.memoryCount = visibleMemories.length
+    return formatted
+  }))
 })
 
 // GET /api/spaces/my-invites
@@ -200,7 +214,15 @@ router.post('/:id/invite', async (req, res) => {
     }
   }
 
-  // Always create a PendingInvite — user must accept/reject from the app
+  // Check if already has a pending invite
+  const existingInvite = await prisma.pendingInvite.findUnique({
+    where: { email_spaceId: { email: normalizedEmail, spaceId: req.params.id } },
+  })
+  if (existingInvite && existingInvite.status === 'pending') {
+    res.status(409).json({ error: 'This person already has a pending invitation' }); return
+  }
+
+  // Create or re-create invite
   const space = await prisma.space.findUnique({ where: { id: req.params.id } })
   await prisma.pendingInvite.upsert({
     where: { email_spaceId: { email: normalizedEmail, spaceId: req.params.id } },

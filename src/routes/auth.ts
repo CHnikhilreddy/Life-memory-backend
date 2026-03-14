@@ -285,6 +285,71 @@ router.post('/change-password', authMiddleware, async (req, res) => {
   res.json({ success: true })
 })
 
+// PATCH /api/auth/profile — update username
+router.patch('/profile', authMiddleware, async (req, res) => {
+  const user = (req as any).user
+  if (!user) { res.status(401).json({ error: 'Unauthorized' }); return }
+  const { name } = req.body
+  if (!name?.trim() || name.trim().length < 2) {
+    res.status(400).json({ error: 'Name must be at least 2 characters' }); return
+  }
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: { name: name.trim() },
+  })
+  res.json({ success: true, user: { id: updated.id, name: updated.name, email: updated.email, avatar: updated.avatar, phone: updated.phone, emailVerified: updated.emailVerified } })
+})
+
+// POST /api/auth/send-login-code — send a 6-digit code for passwordless login
+router.post('/send-login-code', async (req, res) => {
+  const { email } = req.body
+  if (!email?.trim()) { res.status(400).json({ error: 'Email required' }); return }
+  const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } })
+  if (!user) { res.status(404).json({ error: 'No account found with this email', noAccount: true }); return }
+  if (!user.emailVerified) { res.status(403).json({ error: 'Email not verified' }); return }
+  const code = generateCode()
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { verificationCode: code, verificationCodeExpiry: codeExpiry() },
+  })
+  if (process.env.RESEND_API_KEY) {
+    const resend = new Resend(process.env.RESEND_API_KEY)
+    resend.emails.send({
+      from: 'My Inner Circle <noreply@jagadeeshsura.in>',
+      to: user.email,
+      subject: 'Your login code – My Inner Circle',
+      html: `
+        <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px;background:#fffaf6;border-radius:16px;">
+          <h2 style="font-family:Georgia,serif;color:#3d2c1e;margin-bottom:8px;">Welcome back${user.name ? `, ${user.name}` : ''}! 🌸</h2>
+          <p style="color:#6b5744;font-size:15px;line-height:1.6;">Here's your login code:</p>
+          <div style="background:#fff;border-radius:12px;padding:20px;margin:24px 0;text-align:center;border:1px solid #e8ddd6;">
+            <p style="font-family:monospace;font-size:36px;letter-spacing:8px;color:#3d2c1e;margin:0;font-weight:bold;">${code}</p>
+            <p style="color:#9b8579;font-size:12px;margin:8px 0 0;">Expires in 15 minutes</p>
+          </div>
+        </div>
+      `,
+    }).catch((e) => console.error('Login code email failed:', e))
+  }
+  res.json({ success: true })
+})
+
+// POST /api/auth/login-with-code — verify login code
+router.post('/login-with-code', async (req, res) => {
+  const { email, code } = req.body
+  if (!email?.trim() || !code?.trim()) { res.status(400).json({ error: 'Email and code required' }); return }
+  const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } })
+  if (!user) { res.status(404).json({ error: 'No account found' }); return }
+  if (!user.verificationCode || user.verificationCode !== code.trim()) {
+    res.status(401).json({ error: 'Invalid code' }); return
+  }
+  if (user.verificationCodeExpiry && new Date() > user.verificationCodeExpiry) {
+    res.status(401).json({ error: 'Code has expired. Please request a new one.' }); return
+  }
+  // Clear used code
+  await prisma.user.update({ where: { id: user.id }, data: { verificationCode: null, verificationCodeExpiry: null } })
+  res.json({ user: { id: user.id, name: user.name, email: user.email, avatar: user.avatar, phone: user.phone, emailVerified: true }, token: signToken(user.id) })
+})
+
 // GET /api/auth/users (requires auth)
 router.get('/users', authMiddleware, async (_req, res) => {
   const users = await prisma.user.findMany({

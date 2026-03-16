@@ -16,7 +16,7 @@ function codeExpiry(): Date {
 }
 
 function signToken(userId: string): string {
-  return jwt.sign({ userId }, process.env.JWT_SECRET!, { expiresIn: '30d' })
+  return jwt.sign({ userId }, process.env.JWT_SECRET!, { expiresIn: '7d' })
 }
 
 function validatePassword(password: string): string | null {
@@ -350,6 +350,11 @@ router.post('/login-with-code', async (req, res) => {
   // Clear used code
   await prisma.user.update({ where: { id: user.id }, data: { verificationCode: null, verificationCodeExpiry: null } })
   res.json({ user: { id: user.id, name: user.name, email: user.email, avatar: user.avatar, phone: user.phone, emailVerified: true }, token: signToken(user.id) })
+})
+
+// POST /api/auth/refresh — issue a fresh token if the current one is still valid
+router.post('/refresh', authMiddleware, async (req: any, res) => {
+  res.json({ token: signToken(req.user.id) })
 })
 
 // GET /api/auth/users (requires auth)

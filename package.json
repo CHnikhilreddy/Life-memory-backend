@@ -20,6 +20,7 @@
     "express": "^4.21.0",
     "express-rate-limit": "^8.3.1",
     "helmet": "^8.1.0",
+    "isomorphic-dompurify": "^3.3.0",
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.20.0",
     "prisma": "^7.4.2",

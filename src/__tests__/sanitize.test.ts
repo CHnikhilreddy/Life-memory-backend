@@ -10,13 +10,13 @@ function createMockReqRes(body: any) {
 }
 
 describe('sanitizeBody middleware', () => {
-  it('strips HTML tags from string values', () => {
+  it('strips script tags and their content', () => {
     const { req, res, next } = createMockReqRes({
       name: '<script>alert("xss")</script>John',
       email: 'test@example.com',
     })
     sanitizeBody()(req, res, next)
-    expect(req.body.name).toBe('alert("xss")John')
+    expect(req.body.name).toBe('John')
     expect(req.body.email).toBe('test@example.com')
     expect(next).toHaveBeenCalled()
   })
@@ -37,14 +37,24 @@ describe('sanitizeBody middleware', () => {
     expect(req.body.tags).toEqual(['tag1', 'tag2'])
   })
 
-  it('skips excepted fields', () => {
+  it('sanitizes rich text fields to allow safe tags only', () => {
     const { req, res, next } = createMockReqRes({
-      story: '<p>Rich <b>text</b> content</p>',
+      story: '<p>Rich <b>text</b> content</p><script>alert(1)</script>',
       title: '<b>Title</b>',
     })
     sanitizeBody(new Set(['story']))(req, res, next)
     expect(req.body.story).toBe('<p>Rich <b>text</b> content</p>')
     expect(req.body.title).toBe('Title')
+  })
+
+  it('strips event handlers from rich text fields', () => {
+    const { req, res, next } = createMockReqRes({
+      content: '<p onmouseover="alert(1)">Hello</p><img src=x onerror="steal()">',
+    })
+    sanitizeBody(new Set(['content']))(req, res, next)
+    expect(req.body.content).not.toContain('onmouseover')
+    expect(req.body.content).not.toContain('onerror')
+    expect(req.body.content).toContain('<p>Hello</p>')
   })
 
   it('handles non-object body gracefully', () => {

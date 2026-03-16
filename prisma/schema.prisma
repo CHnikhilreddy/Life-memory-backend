@@ -34,10 +34,13 @@ model User {
 model Space {
   id          String   @id
   title       String
-  coverImage  String   @default("")
-  coverEmoji  String   @default("✨")
-  coverIcon   String   @default("")
-  coverColor  String   @default("")
+  coverImage        String   @default("")
+  coverImageOffsetX Float    @default(50)
+  coverImageOffsetY Float    @default(50)
+  coverImageScale   Float    @default(1)
+  coverEmoji        String   @default("✨")
+  coverIcon         String   @default("")
+  coverColor        String   @default("")
   type        String   @default("personal")
   inviteCode  String?  @unique
   description String   @default("")

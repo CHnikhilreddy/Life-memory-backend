@@ -123,7 +123,7 @@ router.get('/:id', async (req, res) => {
 // POST /api/spaces
 router.post('/', async (req, res) => {
   const user = (req as any).user as User
-  const { title, coverEmoji, coverIcon, coverColor, coverImage, type, description } = req.body
+  const { title, coverEmoji, coverIcon, coverColor, coverImage, coverImageOffsetX, coverImageOffsetY, coverImageScale, type, description } = req.body
   if (!title?.trim()) { res.status(400).json({ error: 'Title is required' }); return }
 
   const isGroup = (type || 'personal') === 'group'
@@ -134,6 +134,9 @@ router.post('/', async (req, res) => {
       id: `space-${Date.now()}`,
       title: title.trim(),
       coverImage: coverImage || '',
+      coverImageOffsetX: typeof coverImageOffsetX === 'number' ? coverImageOffsetX : 50,
+      coverImageOffsetY: typeof coverImageOffsetY === 'number' ? coverImageOffsetY : 50,
+      coverImageScale: typeof coverImageScale === 'number' ? coverImageScale : 1,
       coverEmoji: coverEmoji || '✨',
       coverIcon: coverIcon || '',
       coverColor: coverColor || '',
@@ -353,10 +356,13 @@ router.patch('/:id', async (req, res) => {
   const myMember = await prisma.spaceMember.findUnique({ where: { userId_spaceId: { userId: user.id, spaceId: req.params.id } } })
   if (!myMember || myMember.role !== 'owner') { res.status(403).json({ error: 'Only the owner can edit this space' }); return }
 
-  const { title, coverEmoji, coverIcon, coverColor, coverImage, description } = req.body
+  const { title, coverEmoji, coverIcon, coverColor, coverImage, coverImageOffsetX, coverImageOffsetY, coverImageScale, description } = req.body
   const data: any = {}
   if (title !== undefined) data.title = title.trim()
   if (coverImage !== undefined) data.coverImage = coverImage
+  if (coverImageOffsetX !== undefined) data.coverImageOffsetX = coverImageOffsetX
+  if (coverImageOffsetY !== undefined) data.coverImageOffsetY = coverImageOffsetY
+  if (coverImageScale !== undefined) data.coverImageScale = coverImageScale
   if (coverEmoji !== undefined) data.coverEmoji = coverEmoji
   if (coverIcon !== undefined) data.coverIcon = coverIcon
   if (coverColor !== undefined) data.coverColor = coverColor

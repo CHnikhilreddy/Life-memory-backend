@@ -77,6 +77,28 @@ async function sendResetEmail(email: string, code: string) {
 }
 
 
+async function sendVaultResetEmail(email: string, name: string, code: string) {
+  if (!process.env.RESEND_API_KEY) { console.log(`[dev] Vault reset code for ${email}: ${code}`); return }
+  const resend = new Resend(process.env.RESEND_API_KEY)
+  resend.emails.send({
+    from: 'My Inner Circle <noreply@jagadeeshsura.in>',
+    to: email,
+    subject: 'Reset your secret vault code – My Inner Circle',
+    html: `
+      <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px;background:#fffaf6;border-radius:16px;">
+        <h2 style="font-family:Georgia,serif;color:#3d2c1e;margin-bottom:8px;">Vault Code Reset 🔐</h2>
+        <p style="color:#6b5744;font-size:15px;line-height:1.6;">Hi${name ? ` ${name}` : ''},</p>
+        <p style="color:#6b5744;font-size:15px;line-height:1.6;">Use this code to reset your secret vault PIN:</p>
+        <div style="background:#fff;border-radius:12px;padding:20px;margin:24px 0;text-align:center;border:1px solid #e8ddd6;">
+          <p style="font-family:monospace;font-size:36px;letter-spacing:8px;color:#3d2c1e;margin:0;font-weight:bold;">${code}</p>
+          <p style="color:#9b8579;font-size:12px;margin:8px 0 0;">Expires in 15 minutes</p>
+        </div>
+        <p style="color:#9b8579;font-size:13px;">If you didn't request this, you can safely ignore this email. Your vault is still secure.</p>
+      </div>
+    `,
+  }).catch((e) => console.error('Vault reset email failed:', e))
+}
+
 const preSignupSchema = z.object({
   email: z.string().trim().min(1, 'Email is required').email('Enter a valid email address'),
 })
@@ -141,6 +163,11 @@ const changeVaultCodeSchema = z.object({
 
 const verifyVaultCodeSchema = z.object({
   code: z.string().min(1, 'Code is required'),
+})
+
+const resetVaultCodeSchema = z.object({
+  otpCode: z.string().min(1, 'OTP code is required'),
+  newCode: z.string().regex(/^\d{4}$/, 'New code must be exactly 4 digits'),
 })
 
 const hiddenSpacesSchema = z.object({
@@ -236,7 +263,7 @@ router.post('/login', validate(loginSchema), async (req, res) => {
       res.status(403).json({ error: 'Please complete your account setup', incompleteSignup: true, userId: user.id })
       return
     }
-    res.json({ user: { id: user.id, name: user.name, email: user.email, avatar: user.avatar, phone: user.phone, emailVerified: true }, token: signToken(user.id) })
+    res.json({ user: { id: user.id, name: user.name, email: user.email, avatar: user.avatar, phone: user.phone, emailVerified: true, hasVaultCode: !!user.vaultCode, hiddenSpaceIds: (user.hiddenSpaceIds as string[]) || [] }, token: signToken(user.id) })
     return
   }
 
@@ -244,7 +271,7 @@ router.post('/login', validate(loginSchema), async (req, res) => {
   if (phone) {
     const user = await prisma.user.findFirst({ where: { phone } })
     if (!user) { res.status(401).json({ error: 'No account found with this phone number' }); return }
-    res.json({ user: { id: user.id, name: user.name, email: user.email, avatar: user.avatar, phone: user.phone, emailVerified: user.emailVerified }, token: signToken(user.id) })
+    res.json({ user: { id: user.id, name: user.name, email: user.email, avatar: user.avatar, phone: user.phone, emailVerified: user.emailVerified, hasVaultCode: !!user.vaultCode, hiddenSpaceIds: (user.hiddenSpaceIds as string[]) || [] }, token: signToken(user.id) })
     return
   }
 
@@ -405,7 +432,7 @@ router.post('/login-with-code', validate(loginWithCodeSchema), async (req, res) 
   }
   // Clear used code
   await prisma.user.update({ where: { id: user.id }, data: { verificationCode: null, verificationCodeExpiry: null } })
-  res.json({ user: { id: user.id, name: user.name, email: user.email, avatar: user.avatar, phone: user.phone, emailVerified: true }, token: signToken(user.id) })
+  res.json({ user: { id: user.id, name: user.name, email: user.email, avatar: user.avatar, phone: user.phone, emailVerified: true, hasVaultCode: !!user.vaultCode, hiddenSpaceIds: (user.hiddenSpaceIds as string[]) || [] }, token: signToken(user.id) })
 })
 
 // POST /api/auth/vault-code — set vault PIN for the first time
@@ -442,6 +469,54 @@ router.post('/vault-code/verify', authMiddleware, validate(verifyVaultCodeSchema
   if (!dbUser?.vaultCode) { res.status(400).json({ error: 'No vault code set' }); return }
   const valid = await bcrypt.compare(code, dbUser.vaultCode)
   if (!valid) { res.status(401).json({ error: 'Incorrect code' }); return }
+  res.json({ success: true })
+})
+
+// POST /api/auth/vault-code/forgot — send OTP to reset vault PIN
+router.post('/vault-code/forgot', authMiddleware, async (req, res) => {
+  const user = (req as any).user
+  const dbUser = await prisma.user.findUnique({ where: { id: user.id } })
+  if (!dbUser?.vaultCode) { res.status(400).json({ error: 'No vault code set' }); return }
+  const code = generateCode()
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { vaultResetCode: code, vaultResetCodeExpiry: codeExpiry() },
+  })
+  invalidateUserCache(user.id)
+  await sendVaultResetEmail(dbUser.email, dbUser.name, code)
+  res.json({ success: true })
+})
+
+// POST /api/auth/vault-code/verify-otp — validate OTP without resetting (used in step 2 of forgot flow)
+router.post('/vault-code/verify-otp', authMiddleware, async (req, res) => {
+  const user = (req as any).user
+  const { otpCode } = req.body
+  if (!otpCode) { res.status(400).json({ error: 'OTP code is required' }); return }
+  const dbUser = await prisma.user.findUnique({ where: { id: user.id } })
+  if (!dbUser?.vaultResetCode) { res.status(400).json({ error: 'No reset code requested' }); return }
+  if (dbUser.vaultResetCode !== otpCode.trim()) { res.status(401).json({ error: 'Invalid code. Please check your email.' }); return }
+  if (dbUser.vaultResetCodeExpiry && new Date() > dbUser.vaultResetCodeExpiry) {
+    res.status(401).json({ error: 'Code expired. Request a new one.' }); return
+  }
+  res.json({ success: true })
+})
+
+// POST /api/auth/vault-code/reset — verify OTP and set new vault PIN
+router.post('/vault-code/reset', authMiddleware, validate(resetVaultCodeSchema), async (req, res) => {
+  const user = (req as any).user
+  const { otpCode, newCode } = req.body
+  const dbUser = await prisma.user.findUnique({ where: { id: user.id } })
+  if (!dbUser?.vaultResetCode) { res.status(400).json({ error: 'No reset code requested' }); return }
+  if (dbUser.vaultResetCode !== otpCode.trim()) { res.status(401).json({ error: 'Invalid code. Please check your email.' }); return }
+  if (dbUser.vaultResetCodeExpiry && new Date() > dbUser.vaultResetCodeExpiry) {
+    res.status(401).json({ error: 'Code expired. Request a new one.' }); return
+  }
+  const hashed = await bcrypt.hash(newCode, 10)
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { vaultCode: hashed, vaultResetCode: null, vaultResetCodeExpiry: null },
+  })
+  invalidateUserCache(user.id)
   res.json({ success: true })
 })
 

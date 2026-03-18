@@ -22,8 +22,10 @@ model User {
   resetCode             String?
   resetCodeExpiry       DateTime?
 
-  vaultCode      String?
-  hiddenSpaceIds Json    @default("[]")
+  vaultCode               String?
+  hiddenSpaceIds          Json    @default("[]")
+  vaultResetCode          String?
+  vaultResetCodeExpiry    DateTime?
 
   ownedSpaces  Space[]       @relation("SpaceOwner")
   memberships  SpaceMember[]

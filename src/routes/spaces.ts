@@ -95,6 +95,7 @@ router.get('/:id', async (req, res) => {
     where: { spaceId: req.params.id },
     orderBy: { createdAt: 'desc' as const },
     take: limit + 1,
+    include: { _count: { select: { substories: true } } },
   }
   if (cursor) {
     memoriesQuery.cursor = { id: cursor }

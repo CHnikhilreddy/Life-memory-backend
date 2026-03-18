@@ -66,6 +66,7 @@ export function formatMemory(m: any) {
     reactions: parseJson(m.reactions, {}),
     visibleTo: parseJson(m.visibleTo, undefined),
     createdBy: m.createdById,
+    substoryCount: m._count?.substories ?? undefined,
     substories: m.substories ? m.substories.map((s: any) => ({
       id: s.id,
       date: s.date,

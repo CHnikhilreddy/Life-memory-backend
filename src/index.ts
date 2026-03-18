@@ -11,6 +11,7 @@ import spaceRoutes from './routes/spaces.js'
 import memoryRoutes from './routes/memories.js'
 import { sanitizeBody } from './middleware/sanitize.js'
 import { responseHelpers } from './middleware/response.js'
+import { trackError, getErrors, getErrorStats } from './errorTracker.js'
 
 // Validate required environment variables
 const requiredEnvVars = ['DATABASE_URL', 'JWT_SECRET'] as const
@@ -31,9 +32,11 @@ const PORT = process.env.PORT || 3001
 // Prevent process crashes from unhandled errors
 process.on('uncaughtException', (err) => {
   logger.error('Uncaught exception', { error: err.message })
+  trackError(err, 'uncaught')
 })
 process.on('unhandledRejection', (reason) => {
   logger.error('Unhandled rejection', { reason: String(reason) })
+  trackError(reason instanceof Error ? reason : new Error(String(reason)), 'unhandled-rejection')
 })
 
 const allowedOrigins = [
@@ -131,6 +134,7 @@ function wrapRouter(router: any) {
             if (result && typeof result.catch === 'function') {
               result.catch((err: Error) => {
                 logger.error('Route error', { method: req.method, path: req.originalUrl, error: err.message, stack: err.stack })
+                trackError(err, 'route', { method: req.method, path: req.originalUrl, requestId: (req as any).requestId })
                 if (!res.headersSent) {
                   res.status(500).json({ error: 'Internal server error' })
                 }
@@ -149,6 +153,24 @@ app.use('/api/auth', wrapRouter(authRoutes))
 app.use('/api/spaces', wrapRouter(spaceRoutes))
 app.use('/api/spaces', wrapRouter(memoryRoutes))
 
+// Admin error dashboard — protected by ADMIN_SECRET
+app.get('/api/admin/errors', (req, res) => {
+  const secret = req.headers['x-admin-secret'] || req.query.secret
+  if (!process.env.ADMIN_SECRET || secret !== process.env.ADMIN_SECRET) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  const { source, limit, since } = req.query as Record<string, string>
+  res.json({
+    stats: getErrorStats(),
+    errors: getErrors({
+      source,
+      limit: limit ? parseInt(limit) : 50,
+      since,
+    }),
+  })
+})
+
 // Health check
 app.get('/api/health', async (_req, res) => {
   try {
@@ -161,8 +183,9 @@ app.get('/api/health', async (_req, res) => {
 
 // Global error handler — must be last middleware
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   logger.error('Unhandled error', { error: err.message, stack: err.stack })
+  trackError(err, 'middleware', { method: req.method, path: req.originalUrl, requestId: (req as any).requestId })
   res.status(500).json({ error: 'Internal server error' })
 })
 
